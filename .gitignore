@@ -1,0 +1,112 @@
+# ==================================================
+# Python
+# ==================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ==================================================
+# Secrets and environment variables
+# ==================================================
+.env
+.env.*
+!.env.example
+
+# ==================================================
+# Model checkpoints and weights
+# ==================================================
+pre_checkpoints/
+checkpoints/
+
+*.ckpt
+*.pth
+*.pt
+*.safetensors
+*.onnx
+*.bin
+
+# ==================================================
+# Experiment results and generated outputs
+# ==================================================
+exp/
+outputs/
+output/
+results/
+logs/
+wandb/
+runs/
+
+# ==================================================
+# Debug files
+# ==================================================
+debug/
+debug_*/
+debug-*/
+
+# ==================================================
+# Datasets and example data
+# ==================================================
+example_data/
+data/
+datasets/
+
+# ==================================================
+# Generated geometry and 3D files
+# ==================================================
+*.ply
+*.obj
+*.glb
+*.gltf
+
+# ==================================================
+# Generated visualization files
+# ==================================================
+debug_occ_grid_res256.png
+plane_dis_vis_multi.png
+plane_dis_vis_overlay.png
+plane_dis_vis_side_by_side.png
+
+# Generated diagnostic text
+ray_origins.txt
+sup_info_pool_rays.txt
+
+# ==================================================
+# Cache and temporary files
+# ==================================================
+.cache/
+cache/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# ==================================================
+# Build and packaging
+# ==================================================
+build/
+dist/
+*.egg-info/
+
+# ==================================================
+# IDE and operating system
+# ==================================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
