@@ -21,19 +21,21 @@ class PanoVggt:
 
     def __init__(
         self,
-        config_path: str,
-        checkpoint_path: str,
         device: str = "cuda",
     ):
+        
+        self.device = device
+
+        self.config_path = "configs/default.yaml"
+        self.checkpoint_path = "pre_checkpoints/panovggt_model.pt"
+
+        self.model = self.load_model(
+            self.config_path,
+            self.checkpoint_path
+        )
         if device == "cuda" and not torch.cuda.is_available():
             device = "cpu"
 
-        self.device = device
-        self.model = self.load_model(
-            config_path,
-            checkpoint_path,
-            device,
-        )
         self.model.eval().to(device)
         
     def load_model(self, config_path: str, checkpoint_path: str, device: str) -> PanoVGGTModel:

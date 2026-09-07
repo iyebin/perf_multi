@@ -33,6 +33,7 @@ class Dataset:
         self.data_dir = None
         self.poses = []
         self.case_name = 'wp'
+        self.image_names_raw = []
         # self.reference_idx = 0
 
     def get_ref_distance(self):
@@ -179,11 +180,12 @@ class Dataset:
 
         else:
            
-            for i in range(self.n_images):
-                #pano vggt
-                ref_distance = PanoVggt(self.image_dir, self.image_names)
-                ref_distances.append(ref_distance)
-                # ref_normals.append(ref_normal)
+        
+            ref_distance = PanoVggt(self.image_dir, self.image_names_raw)
+            ref_distances.append(ref_distance)
+            # ref_normals.append(ref_normal)
+
+        return ref_distances
 
 
     '''
@@ -265,11 +267,14 @@ class WildDataset(Dataset):
         self.image_dir = conf.image_dir
 
         # png 파일 자동 탐색
-        self.image_names = sorted([
-            os.path.splitext(f)[0]   # 확장자 제거
-            for f in os.listdir(self.image_dir)
+        self.image_names_raw = sorted([
+            f for f in os.listdir(self.image_dir)
             if f.endswith('.jpg')
         ])
+        self.image_names = [
+            os.path.splitext(f)[0]
+            for f in self.image_names_raw
+        ]
         self.n_images = len(self.image_names)
 
         #image_dir + image_names[i] -> 이미지 저장 경로
@@ -301,7 +306,7 @@ class WildDataset(Dataset):
         
 
         _, self.ref_normals = self.get_joint_distance_normal()
-        self.ref_distacens = self.get_panovggt_distance()
+        self.ref_distances = self.get_panovggt_distance()
         # self.fit_scene_to_aabb()
         self.normalization()
 
