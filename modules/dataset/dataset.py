@@ -300,7 +300,8 @@ class WildDataset(Dataset):
 
         
 
-        self.ref_distances, self.ref_normals = self.get_joint_distance_normal()
+        _, self.ref_normals = self.get_joint_distance_normal()
+        self.ref_distacens = self.get_panovggt_distance()
         # self.fit_scene_to_aabb()
         self.normalization()
 
