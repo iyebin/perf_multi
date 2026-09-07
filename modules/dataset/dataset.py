@@ -12,7 +12,7 @@ from utils.utils import read_dpt, read_image, write_image
 from utils.camera_utils import *
 from utils.geo_utils import align_scale, get_edge_mask
 from modules.geo_predictors import PanoFusionInvPredictor, PanoFusionNormalPredictor, PanoGeoRefiner, PanoJointPredictor
-
+from modules.geo_predictors import PanoVggt
 
 
 class Dataset:
@@ -152,6 +152,49 @@ class Dataset:
             ref_normals = torch.stack(ref_normals)
 
         return ref_distances, ref_normals
+
+    def get_panovggt_distance(self):
+        assert self.images is not None
+        assert self.ref_distance_path is not None
+        assert self.ref_normal_path is not None
+        assert self.height > 0 and self.width > 0
+
+        self.poses, self.trans = load_cam_extrinsic(self.image_dir) #camera coordinate(w2c)
+
+        #pano vggt(1 parameter)
+        ref_distances = []
+        # ref_normals = []
+
+        # ones_dim_mask = torch.ones([self.height, self.width, 1])
+        # ones_mask = torch.ones([self.height, self.width])
+        # zero_mask = torch.zeros([self.height, self.width])
+
+        #if distances / normals exist
+        if os.path.exists(self.ref_distance_path) and\
+                os.path.exists(self.ref_normal_path):
+                    ref_distances = np.load(self.ref_distance_path)
+                    ref_distances = torch.from_numpy(ref_distances.astype(np.float32)).cuda()
+                    # ref_normals = np.load(self.ref_normal_path)
+                    # ref_normals = torch.from_numpy(ref_normals.astype(np.float32)).cuda()
+
+        else:
+           
+            for i in range(self.n_images):
+                #pano vggt
+                ref_distance = PanoVggt(self.image_dir, self.image_names)
+                ref_distances.append(ref_distance)
+                # ref_normals.append(ref_normal)
+
+
+    '''
+    python inference.py \
+    --config  training/config/default.yaml \
+    --checkpoint pre_checkpoints/panovggt_model.pt \
+    --image_dir  img_pathes \
+    --mask_dir   data/image_mask \
+    --output_dir results
+
+    '''
 
     def normalization(self):
         # 모든 뷰에 공통 scale을 적용해 뷰 간 절대 거리 단위를 일치시킴
