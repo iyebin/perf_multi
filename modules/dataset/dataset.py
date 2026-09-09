@@ -181,7 +181,8 @@ class Dataset:
         else:
            
         
-            ref_distance = PanoVggt(self.image_dir, self.image_names_raw)
+            predictor = PanoVggt()
+            ref_distance = predictor.main(self.image_dir, self.image_names_raw)
             ref_distances.append(ref_distance)
             # ref_normals.append(ref_normal)
 
@@ -198,13 +199,27 @@ class Dataset:
 
     '''
 
-    def normalization(self):
-        # 모든 뷰에 공통 scale을 적용해 뷰 간 절대 거리 단위를 일치시킴
+    # def normalization(self):
+    #     # 모든 뷰에 공통 scale을 적용해 뷰 간 절대 거리 단위를 일치시킴
         
+    #     global_max = max(d.max().item() for d in self.ref_distances)
+    #     scale = global_max * 1.05
+      
+    #     self.ref_distances /= scale
+
+    def normalization(self):
+        # 모든 depth와 pose translation에 동일한 scale 적용
         global_max = max(d.max().item() for d in self.ref_distances)
         scale = global_max * 1.05
-      
-        self.ref_distances /= scale
+
+        # Depth 정규화
+        self.ref_distances = self.ref_distances / scale
+
+        # Pose translation 정규화
+        self.ref_poses = self.ref_poses.clone()
+        self.ref_poses[:, :3, 3] /= scale
+
+        self.normalization_scale = scale
 
     def save_ref_geometry(self):
         # Save distance and normal data

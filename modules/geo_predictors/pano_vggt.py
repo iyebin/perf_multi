@@ -31,7 +31,8 @@ class PanoVggt:
 
         self.model = self.load_model(
             self.config_path,
-            self.checkpoint_path
+            self.checkpoint_path,
+            self.device
         )
         if device == "cuda" and not torch.cuda.is_available():
             device = "cpu"
