@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from panovggt_model import PanoVGGTModel
+from .panovggt_model import PanoVGGTModel
 
 _IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif"}
 

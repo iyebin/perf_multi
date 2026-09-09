@@ -7,13 +7,13 @@ import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin
 
-from panovggt.models.aggregator import Aggregator
-from panovggt.layers.transformer_head import (
+from .aggregator import Aggregator
+from .transformer_head import (
     TransformerDecoder,
     LinearPts3d,
     ContextTransformerDecoder,
 )
-from panovggt.layers.camera_head import CameraHead
+from .camera_head import CameraHead
 
 
 def _homogenize_points(xyz: torch.Tensor) -> torch.Tensor:
