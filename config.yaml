@@ -1,5 +1,5 @@
 device:
-  base_exp_dir: /data/intern01/perf/multi_pano/baseline_1m/132_144
+  base_exp_dir: /data/intern01/perf/multi_pano/1mTo5m_panovggt
 exp_name: nerf_experiment
 mode: train
 is_continue: false
@@ -8,7 +8,7 @@ dataset:
   image_resize:
   - 2048
   - 1024
-  image_dir: /data/intern01/PeRF_multi/example_data/bmw_sample_132/132_144
+  image_dir: /data/intern01/PeRF_multi/example_data/bmw_sample_132/132_to_180
   x:
   - 0
   - 1.5

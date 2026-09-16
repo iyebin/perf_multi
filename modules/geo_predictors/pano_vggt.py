@@ -405,7 +405,7 @@ class PanoVggt:
         if all_xyz:
             merged_xyz = np.concatenate(all_xyz, axis=0)
             merged_rgb = np.concatenate(all_rgb, axis=0)
-            self.save_ply(os.path.join(image_dir, "merged.ply"), merged_xyz, merged_rgb)
+            self.save_ply(os.path.join(image_dir, "ref_geometry", "ref_geometry.ply"), merged_xyz, merged_rgb)
             print(f"\n[pipeline] Merged cloud: {len(merged_xyz):,} points total.")
 
         # ── save all poses together ───────────────────────────────────────────

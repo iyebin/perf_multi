@@ -207,19 +207,20 @@ class Dataset:
       
     #     self.ref_distances /= scale
 
-    def normalization(self):
-        # 모든 depth와 pose translation에 동일한 scale 적용
-        global_max = max(d.max().item() for d in self.ref_distances)
-        scale = global_max * 1.05
+    # def normalization(self):
+    #     # 모든 depth와 pose translation에 동일한 scale 적용
+    #     global_max = max(d.max().item() for d in self.ref_distances)
+    #     scale = global_max * 1.05
 
-        # Depth 정규화
-        self.ref_distances = self.ref_distances / scale
+    #     # Depth 정규화
+    #     breakpoint()
+    #     self.ref_distances = self.ref_distances / scale
 
-        # Pose translation 정규화
-        self.ref_poses = self.ref_poses.clone()
-        self.ref_poses[:, :3, 3] /= scale
+    #     # Pose translation 정규화
+    #     self.ref_poses = self.ref_poses.clone()
+    #     self.ref_poses[:, :3, 3] /= scale
 
-        self.normalization_scale = scale
+    #     self.normalization_scale = scale
 
     def save_ref_geometry(self):
         # Save distance and normal data
@@ -322,8 +323,10 @@ class WildDataset(Dataset):
 
         _, self.ref_normals = self.get_joint_distance_normal()
         self.ref_distances = self.get_panovggt_distance()
+        print("shape 체크(distances)")
+        breakpoint()
         # self.fit_scene_to_aabb()
-        self.normalization()
+        #  self.normalization()
 
-        self.save_ref_geometry()
+        # self.save_ref_geometry()
 
