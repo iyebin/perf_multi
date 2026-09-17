@@ -26,7 +26,7 @@ class Dataset:
         self.ref_geometry_path = None
         self.images = None
         self.gt_distances = []
-        self.ref_distances = []
+        self.ref_distances = 0
         self.ref_normals = []
         self.height = 0
         self.width = 0
@@ -157,34 +157,31 @@ class Dataset:
     def get_panovggt_distance(self):
         assert self.images is not None
         assert self.ref_distance_path is not None
-        assert self.ref_normal_path is not None
         assert self.height > 0 and self.width > 0
 
-        self.poses, self.trans = load_cam_extrinsic(self.image_dir) #camera coordinate(w2c)
+        self.poses, self.trans = load_cam_extrinsic(self.image_dir)  # camera coordinate(w2c)
 
-        #pano vggt(1 parameter)
-        ref_distances = []
-        # ref_normals = []
+        if os.path.exists(self.ref_distance_path):
+            print(f"[PanoVGGT] load existing distance: {self.ref_distance_path}")
 
-        # ones_dim_mask = torch.ones([self.height, self.width, 1])
-        # ones_mask = torch.ones([self.height, self.width])
-        # zero_mask = torch.zeros([self.height, self.width])
-
-        #if distances / normals exist
-        if os.path.exists(self.ref_distance_path) and\
-                os.path.exists(self.ref_normal_path):
-                    ref_distances = np.load(self.ref_distance_path)
-                    ref_distances = torch.from_numpy(ref_distances.astype(np.float32)).cuda()
-                    # ref_normals = np.load(self.ref_normal_path)
-                    # ref_normals = torch.from_numpy(ref_normals.astype(np.float32)).cuda()
+            ref_distances = np.load(self.ref_distance_path)
+            ref_distances = torch.from_numpy(
+                ref_distances.astype(np.float32)
+            ).cuda()
 
         else:
-           
-        
+            print("[PanoVGGT] no saved distance, running predictor...")
+
             predictor = PanoVggt()
-            ref_distance = predictor.main(self.image_dir, self.image_names_raw)
-            ref_distances.append(ref_distance)
-            # ref_normals.append(ref_normal)
+
+            ref_distance = predictor.main(
+                self.image_dir,
+                self.image_names_raw
+            )  # (H, W)
+
+            ref_distances = torch.from_numpy(
+                ref_distance.astype(np.float32)
+            ).cuda()
 
         return ref_distances
 
@@ -222,16 +219,16 @@ class Dataset:
 
     #     self.normalization_scale = scale
 
-    def save_ref_geometry(self):
-        # Save distance and normal data
-        os.makedirs(pjoin(self.image_dir, 'ref_geometry'), exist_ok=True)
-        os.makedirs(pjoin(self.image_dir, 'ref_distance'), exist_ok=True)
-        os.makedirs(pjoin(self.image_dir, 'ref_normal'), exist_ok=True)
+    # def save_ref_geometry(self):
+    #     # Save distance and normal data
+    #     os.makedirs(pjoin(self.image_dir, 'ref_geometry'), exist_ok=True)
+    #     os.makedirs(pjoin(self.image_dir, 'ref_distance'), exist_ok=True)
+    #     os.makedirs(pjoin(self.image_dir, 'ref_normal'), exist_ok=True)
 
-        if self.ref_distance_path is not None:
-            np.save(self.ref_distance_path, self.ref_distances.cpu().numpy())
-        if self.ref_normal_path is not None:
-            np.save(self.ref_normal_path, self.ref_normals.cpu().numpy())
+    #     if self.ref_distance_path is not None:
+    #         np.save(self.ref_distance_path, self.ref_distances.cpu().numpy())
+    #     if self.ref_normal_path is not None:
+    #         np.save(self.ref_normal_path, self.ref_normals.cpu().numpy())
 
         # Save point cloud
         # pano_dirs = img_coord_to_pano_direction(img_coord_from_hw(self.height, self.width)) #just direction
@@ -255,6 +252,59 @@ class Dataset:
         # assert self.ref_geometry_path is not None and self.ref_geometry_path[-4:] == '.ply'
         # pcd.export(self.ref_geometry_path)
 
+    def save_ref_geometry(self):
+        # Save distance and normal data
+        os.makedirs(pjoin(self.image_dir, 'ref_geometry'), exist_ok=True)
+        os.makedirs(pjoin(self.image_dir, 'ref_distance'), exist_ok=True)
+        os.makedirs(pjoin(self.image_dir, 'ref_normal'), exist_ok=True)
+
+        if self.ref_distance_path is not None:
+            np.save(self.ref_distance_path, self.ref_distances.cpu().numpy())
+        if self.ref_normal_path is not None:
+            np.save(self.ref_normal_path, self.ref_normals.cpu().numpy())
+
+        # Save point cloud : PanoVggt.merged_distance_map 의 역변환
+        #   pixel -> dir_perf -> p_perf = dir * d -> p_cam = R^T p_perf -> p_world = ref_c2w p_cam
+        ref_idx = 0
+        dist = self.ref_distances.squeeze().float().cpu().numpy().astype(np.float64)  # (H, W)
+        Hd, Wd = dist.shape
+        valid = np.isfinite(dist) & (dist > 0)
+
+        pano_dirs = img_coord_to_pano_direction(img_coord_from_hw(Hd, Wd)).float().cpu().numpy().astype(np.float64)
+        pano_dirs /= np.linalg.norm(pano_dirs, axis=-1, keepdims=True)
+        pts_perf = (pano_dirs * dist[..., None])[valid]                      # (N, 3) PeRF pano 좌표
+
+        # forward 에서 검증/보정된 변환 사용 (없으면 원래 가정으로 fallback)
+        transform_path = pjoin(self.image_dir, 'ref_geometry', 'ref_transform.npz')
+        if os.path.exists(transform_path):
+            T = np.load(transform_path)
+            ref_c2w = T['ref_c2w'].astype(np.float64)
+            R_cam2perf = T['R_cam2perf'].astype(np.float64)
+        else:
+            print(f"[save_ref_geometry][warn] {transform_path} 없음 → c2w + OpenCV->PeRF 가정 사용")
+            ref_c2w = np.load(pjoin(self.image_dir, 'all_poses.npy'))[ref_idx].astype(np.float64)
+            R_cam2perf = np.array([[ 0,  0, 1],
+                                   [-1,  0, 0],
+                                   [ 0, -1, 0]], dtype=np.float64)
+
+        pts_cam = pts_perf @ R_cam2perf                                      # = R^T p (직교행렬)
+        pts = pts_cam @ ref_c2w[:3, :3].T + ref_c2w[:3, 3]                   # PanoVGGT world 좌표
+
+        # check point numbers
+        points_count_path = pjoin(self.image_dir, 'ref_geometry', 'points_count.txt')
+        with open(points_count_path, 'w') as f:
+            f.write(f"all points number: {pts.shape[0]}\n")
+
+        img = self.images[ref_idx].float().cpu().numpy()
+        if img.shape[:2] != (Hd, Wd):
+            img = cv.resize(img, (Wd, Hd), interpolation=cv.INTER_AREA)
+        colors = (np.clip(img[valid], 0, 1) * 255).astype(np.uint8)
+
+        assert pts.shape[0] == colors.shape[0], (pts.shape, colors.shape)
+
+        pcd = trimesh.PointCloud(pts, vertex_colors=colors)
+        assert self.ref_geometry_path is not None and self.ref_geometry_path[-4:] == '.ply'
+        pcd.export(self.ref_geometry_path)
 
     def fit_scene_to_aabb(self, aabb_extent=0.9):
         """camera(c2w) + depth가 NeRF AABB [-1,1] 안에 들어오도록 균등 스케일."""
@@ -296,7 +346,7 @@ class WildDataset(Dataset):
         #image_dir + image_names[i] -> 이미지 저장 경로
         self.ref_distance_path = pjoin(self.image_dir, 'ref_distance', f"distance.npy") 
         self.ref_normal_path = pjoin(self.image_dir, 'ref_normal', f"normal.npy") 
-        self.ref_geometry_path = pjoin(self.image_dir, 'ref_geometry', f"geometry.ply") 
+        self.ref_geometry_path = pjoin(self.image_dir, 'ref_geometry', f"geometry_distance.ply") 
         self.warped_image_dir = pjoin(self.image_dir, 'warped_images')
         # self.ref_distance_path = '.'.join(self.image_path.split('.')[:-1]) + '_ref_distance.npy'
         # self.ref_normal_path = '.'.join(self.image_path.split('.')[:-1]) + '_ref_normal.npy'
@@ -324,7 +374,7 @@ class WildDataset(Dataset):
         _, self.ref_normals = self.get_joint_distance_normal()
         self.ref_distances = self.get_panovggt_distance()
         print("shape 체크(distances)")
-        breakpoint()
+        # breakpoint()
         # self.fit_scene_to_aabb()
         #  self.normalization()
 

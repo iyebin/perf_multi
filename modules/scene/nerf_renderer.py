@@ -56,7 +56,7 @@ class NeRFPropRenderer(nn.Module):
             alpha = 1. - torch.exp(-density * dists)
 
             return rgb, alpha[..., 0]
-        breakpoint()
+        # breakpoint()
         t_starts, t_ends = estimator.sampling(
             prop_sigma_fns=[lambda *args: prop_sigma_fn(*args, p) for p in prop_networks],
             prop_samples=self.n_samples_per_prop,

@@ -231,174 +231,356 @@ class PanoVggt:
 
         return out
 
-    def merged_distance_map(self, merged_xyz, ref_pose, H=518, W=1036,):
+    # def merged_distance_map(self, merged_xyz, ref_pose, H=518, W=1036,
+    #                     ref_points_hw3=None, transform_path=None,
+    #                     surface_tol=0.03, fill_iters=3):
+
+    #     """
+    #     merged_xyz : (N, 3)
+    #         PanoVGGT world-frame points
+
+    #     ref_pose : (4, 4)
+    #         PanoVGGT camera-to-world pose (OpenCV c2w)
+
+    #     return:
+    #         merged_distance : (H, W)
+    #         reference panorama 기준 Euclidean distance map
+    #     """
+
+    #     assert merged_xyz.ndim == 2
+    #     assert merged_xyz.shape[1] == 3
+    #     assert ref_pose.shape == (4, 4)
+
+    #     # --------------------------------------------------
+    #     # 1. world -> reference camera
+    #     #
+    #     # PanoVGGT ref_pose = c2w
+    #     # therefore inverse(ref_pose) = w2c
+    #     # --------------------------------------------------
+    #     ref_w2c = np.linalg.inv(ref_pose)
+
+    #     ones = np.ones(
+    #         (merged_xyz.shape[0], 1),
+    #         dtype=merged_xyz.dtype
+    #     )
+
+    #     points_h = np.concatenate(
+    #         [merged_xyz, ones],
+    #         axis=1
+    #     )
+
+    #     points_cam_h = (
+    #         ref_w2c @ points_h.T
+    #     ).T
+
+    #     # OpenCV camera coordinates
+    #     points_cv = points_cam_h[:, :3]
+
+    #     # --------------------------------------------------
+    #     # 2. distance from reference camera
+    #     #
+    #     # Euclidean/ray distance
+    #     # --------------------------------------------------
+    #     distance = np.linalg.norm(
+    #         points_cv,
+    #         axis=1
+    #     )
+
+    #     valid = (
+    #         np.isfinite(points_cv).all(axis=1)
+    #         & np.isfinite(distance)
+    #         & (distance > 1e-6)
+    #     )
+
+    #     points_cv = points_cv[valid]
+    #     distance = distance[valid]
+
+    #     # --------------------------------------------------
+    #     # 3. OpenCV camera coordinates
+    #     #          ->
+    #     #    PeRF panorama local coordinates
+    #     #
+    #     # OpenCV:
+    #     #   +X = right
+    #     #   +Y = down
+    #     #   +Z = forward
+    #     #
+    #     # PeRF pano:
+    #     #   +X = forward
+    #     #   -Y = right
+    #     #   -Z = down
+    #     # --------------------------------------------------
+    #     points_perf = np.stack(
+    #     [
+    #         points_cv[:, 2],    # PeRF X = OpenCV Z
+    #         -points_cv[:, 0],   # PeRF Y = -OpenCV X
+    #         -points_cv[:, 1],   # PeRF Z = -OpenCV Y
+    #     ], axis=1)
+
+    #     # --------------------------------------------------
+    #     # 4. points -> unit directions
+    #     # --------------------------------------------------
+    #     dirs_perf = (
+    #         points_perf
+    #         / distance[:, None]
+    #     )
+
+    #     # --------------------------------------------------
+    #     # 5. direction -> ERP image coordinates
+    #     #
+    #     # PeRF 자체 convention 사용
+    #     # output:
+    #     #   img_coord[:, 0] = normalized row [0,1]
+    #     #   img_coord[:, 1] = normalized col [0,1]
+    #     # --------------------------------------------------
+
+    #     dirs_t = torch.from_numpy(
+    #     dirs_perf.astype(np.float32)
+    #     )
+
+    #     img_coord = (
+    #         direction_to_img_coord(dirs_t)
+    #         .cpu()
+    #         .numpy()
+    #     )
+
+    #     v = np.floor(
+    #         img_coord[:, 0] * H
+    #     ).astype(np.int32)
+
+    #     u = np.floor(
+    #         img_coord[:, 1] * W
+    #     ).astype(np.int32)
+
+
+    #     # ERP horizontal seam: wrap around
+    #     u = u % W
+
+    #     # top / bottom
+    #     v = np.clip(
+    #         v,
+    #         0,
+    #         H - 1
+    #     )
+
+    #     # --------------------------------------------------
+    #     # 6. spherical z-buffer
+    #     #
+    #     # 같은 ERP pixel에 여러 point가 투영되면
+    #     # reference camera에서 가장 가까운 point 선택
+    #     # --------------------------------------------------
+
+    #     merged_distance = np.full(
+    #     (H, W),
+    #     np.inf,
+    #     dtype=np.float32
+    #     )
+
+    #     np.minimum.at(
+    #         merged_distance,
+    #         (v, u),
+    #         distance.astype(np.float32)
+    #     )
+
+    #     # 7. validity statistics
+    #     valid_pixels = np.isfinite(
+    #         merged_distance
+    #     )
+
+    #     valid_ratio = valid_pixels.mean()
+
+    #     print(
+    #         f"valid pixel ratio: "
+    #         f"{valid_ratio:.4f} "
+    #         f"({valid_pixels.sum()}/{H * W})"
+    #     )
+
+    #     # Empty pixels -> 0
+    #     merged_distance[
+    #         ~valid_pixels
+    #     ] = 0.0
+
+    #     return merged_distance
+
+    def merged_distance_map(self, merged_xyz, ref_pose, H=518, W=1036,
+                            ref_points_hw3=None, transform_path=None,
+                            surface_tol=0.03, fill_iters=3):
 
         """
         merged_xyz : (N, 3)
             PanoVGGT world-frame points
 
         ref_pose : (4, 4)
-            PanoVGGT camera-to-world pose (OpenCV c2w)
+            PanoVGGT reference camera pose (c2w 로 가정, ref_points_hw3 가 있으면 검증)
+
+        ref_points_hw3 : (H, W, 3) or None
+            reference 프레임의 world_points (픽셀 정렬 유지된 것).
+            주어지면 c2w/w2c 해석과 OpenCV->PeRF 축 규약을 검증/보정.
+
+        transform_path : str or None
+            역변환용 (ref_c2w, R_cam2perf) 저장 경로 (.npz)
 
         return:
             merged_distance : (H, W)
-            reference panorama 기준 Euclidean distance map
+            reference panorama 기준 Euclidean distance map (invalid = 0)
         """
 
         assert merged_xyz.ndim == 2
         assert merged_xyz.shape[1] == 3
         assert ref_pose.shape == (4, 4)
 
+        # float32 point + inv() 누적 오차 방지
+        merged_xyz = merged_xyz.astype(np.float64)
+        ref_pose = ref_pose.astype(np.float64)
+
+        # 가정: ref_pose = c2w, OpenCV(+X right, +Y down, +Z fwd) -> PeRF(+X fwd, -Y right, -Z down)
+        ref_c2w = ref_pose
+        R_cam2perf = np.array([[ 0,  0, 1],
+                               [-1,  0, 0],
+                               [ 0, -1, 0]], dtype=np.float64)
+
+        # --------------------------------------------------
+        # 0. 가정 검증 (ref 프레임의 픽셀 <-> 점 대응 사용)
+        #
+        #   올바른 (pose 해석, 축 행렬) 이라면
+        #   ref 프레임 픽셀 (i, j) 의 점 방향 == PeRF ERP 픽셀 (i, j) 의 방향
+        # --------------------------------------------------
+        if ref_points_hw3 is not None:
+            from utils.camera_utils import img_coord_from_hw, img_coord_to_pano_direction
+
+            Hr, Wr = ref_points_hw3.shape[:2]
+            stride = 4
+            grid_dirs = img_coord_to_pano_direction(img_coord_from_hw(Hr, Wr)).float().cpu().numpy()
+            p = grid_dirs[::stride, ::stride].reshape(-1, 3).astype(np.float64)
+            p /= np.linalg.norm(p, axis=1, keepdims=True)
+            w = ref_points_hw3[::stride, ::stride].reshape(-1, 3).astype(np.float64)
+            ok_w = np.isfinite(w).all(axis=1)
+            w, p = w[ok_w], p[ok_w]
+
+            def ang_err(c2w, R):
+                w2c = np.linalg.inv(c2w)
+                c = w @ w2c[:3, :3].T + w2c[:3, 3]
+                n = np.linalg.norm(c, axis=1)
+                m = n > 1e-6
+                cosang = np.clip(np.sum(((c[m] / n[m, None]) @ R.T) * p[m], axis=1), -1, 1)
+                return float(np.median(np.degrees(np.arccos(cosang)))), c[m], p[m]
+
+            results = []
+            for pose_name, c2w in (("c2w", ref_pose), ("w2c", np.linalg.inv(ref_pose))):
+                # (a) 원래 가정한 고정 축 행렬
+                e_fixed, c, pm = ang_err(c2w, R_cam2perf)
+                results.append((e_fixed, pose_name, "fixed", c2w, R_cam2perf))
+                # (b) 데이터로 추정한 직교행렬 (Procrustes)
+                U, _, Vt = np.linalg.svd(pm.T @ (c / np.linalg.norm(c, axis=1, keepdims=True)))
+                R_fit = U @ Vt
+                e_fit, _, _ = ang_err(c2w, R_fit)
+                results.append((e_fit, pose_name, "fitted", c2w, R_fit))
+
+            for e, pn, rn, _, _ in results:
+                print(f"[merge][check] pose={pn:3s} axis={rn:6s} median angular error = {e:.3f} deg")
+
+            e_assumed = results[0][0]                     # c2w + fixed
+            if e_assumed < 1.0:
+                print("[merge][check] 가정(c2w + OpenCV->PeRF) 확인됨")
+            else:
+                best = min(results, key=lambda r: r[0])
+                _, pn, rn, ref_c2w, R_cam2perf = best
+                print(f"[merge][check][warn] 가정 불일치 (err={e_assumed:.2f} deg) "
+                      f"→ pose={pn}, axis={rn} 사용 (err={best[0]:.2f} deg)")
+                print(f"[merge][check] R_cam2perf =\n{np.round(R_cam2perf, 3)}")
+                if best[0] > 2.0:
+                    print("[merge][check][warn] 어떤 조합도 잘 맞지 않습니다. ERP 규약 자체가 다를 수 있습니다.")
+        else:
+            print("[merge][check] ref_points_hw3 없음 → c2w + OpenCV->PeRF 가정 그대로 사용 (검증 안 함)")
+
+        if transform_path is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(transform_path)), exist_ok=True)
+            np.savez(transform_path, ref_c2w=ref_c2w, R_cam2perf=R_cam2perf)
+            print(f"[merge] transform saved → {transform_path}")
+
         # --------------------------------------------------
         # 1. world -> reference camera
-        #
-        # PanoVGGT ref_pose = c2w
-        # therefore inverse(ref_pose) = w2c
         # --------------------------------------------------
-        ref_w2c = np.linalg.inv(ref_pose)
-
-        ones = np.ones(
-            (merged_xyz.shape[0], 1),
-            dtype=merged_xyz.dtype
-        )
-
-        points_h = np.concatenate(
-            [merged_xyz, ones],
-            axis=1
-        )
-
-        points_cam_h = (
-            ref_w2c @ points_h.T
-        ).T
-
-        # OpenCV camera coordinates
-        points_cv = points_cam_h[:, :3]
+        ref_w2c = np.linalg.inv(ref_c2w)
+        points_cam = merged_xyz @ ref_w2c[:3, :3].T + ref_w2c[:3, 3]
 
         # --------------------------------------------------
-        # 2. distance from reference camera
-        #
-        # Euclidean/ray distance
+        # 2. distance + validity
         # --------------------------------------------------
-        distance = np.linalg.norm(
-            points_cv,
-            axis=1
-        )
-
+        distance = np.linalg.norm(points_cam, axis=1)
         valid = (
-            np.isfinite(points_cv).all(axis=1)
+            np.isfinite(points_cam).all(axis=1)
             & np.isfinite(distance)
             & (distance > 1e-6)
         )
-
-        points_cv = points_cv[valid]
+        points_cam = points_cam[valid]
         distance = distance[valid]
 
         # --------------------------------------------------
-        # 3. OpenCV camera coordinates
-        #          ->
-        #    PeRF panorama local coordinates
-        #
-        # OpenCV:
-        #   +X = right
-        #   +Y = down
-        #   +Z = forward
-        #
-        # PeRF pano:
-        #   +X = forward
-        #   -Y = right
-        #   -Z = down
+        # 3. camera -> PeRF pano directions
         # --------------------------------------------------
-        points_perf = np.stack(
-        [
-            points_cv[:, 2],    # PeRF X = OpenCV Z
-            -points_cv[:, 0],   # PeRF Y = -OpenCV X
-            -points_cv[:, 1],   # PeRF Z = -OpenCV Y
-        ], axis=1)
+        dirs_perf = (points_cam / distance[:, None]) @ R_cam2perf.T
 
         # --------------------------------------------------
-        # 4. points -> unit directions
+        # 4. direction -> ERP pixel (PeRF convention)
         # --------------------------------------------------
-        dirs_perf = (
-            points_perf
-            / distance[:, None]
-        )
+        img_coord = direction_to_img_coord(
+            torch.from_numpy(dirs_perf.astype(np.float32))
+        ).cpu().numpy()
 
-        # --------------------------------------------------
-        # 5. direction -> ERP image coordinates
-        #
-        # PeRF 자체 convention 사용
-        # output:
-        #   img_coord[:, 0] = normalized row [0,1]
-        #   img_coord[:, 1] = normalized col [0,1]
-        # --------------------------------------------------
-
-        dirs_t = torch.from_numpy(
-        dirs_perf.astype(np.float32)
-        )
-
-        img_coord = (
-            direction_to_img_coord(dirs_t)
-            .cpu()
-            .numpy()
-        )
-
-        v = np.floor(
-            img_coord[:, 0] * H
-        ).astype(np.int32)
-
-        u = np.floor(
-            img_coord[:, 1] * W
-        ).astype(np.int32)
-
-
-        # ERP horizontal seam: wrap around
-        u = u % W
-
-        # top / bottom
-        v = np.clip(
-            v,
-            0,
-            H - 1
-        )
+        v = np.clip(np.floor(img_coord[:, 0] * H).astype(np.int64), 0, H - 1)
+        u = np.floor(img_coord[:, 1] * W).astype(np.int64) % W
+        pix = v * W + u
 
         # --------------------------------------------------
-        # 6. spherical z-buffer
-        #
-        # 같은 ERP pixel에 여러 point가 투영되면
-        # reference camera에서 가장 가까운 point 선택
+        # 5. z-buffer: 가장 앞 surface (d_min*(1+tol) 이내) 평균
         # --------------------------------------------------
+        d_min = np.full(H * W, np.inf)
+        np.minimum.at(d_min, pix, distance)
 
-        merged_distance = np.full(
-        (H, W),
-        np.inf,
-        dtype=np.float32
-        )
+        front = distance <= d_min[pix] * (1.0 + surface_tol)
+        d_sum = np.bincount(pix[front], weights=distance[front], minlength=H * W)
+        d_cnt = np.bincount(pix[front], minlength=H * W)
 
-        np.minimum.at(
-            merged_distance,
-            (v, u),
-            distance.astype(np.float32)
-        )
+        merged = np.zeros(H * W, dtype=np.float64)
+        has = d_cnt > 0
+        merged[has] = d_sum[has] / d_cnt[has]
+        merged = merged.reshape(H, W)
+        valid_pixels = has.reshape(H, W)
 
-        # 7. validity statistics
-        valid_pixels = np.isfinite(
-            merged_distance
-        )
+        # --------------------------------------------------
+        # 6. 고립된 floater 제거 (3x3 median, 수평 wrap)
+        # --------------------------------------------------
+        pad = np.pad(np.where(valid_pixels, merged, np.nan), 1, mode="wrap")
+        win = np.lib.stride_tricks.sliding_window_view(pad, (3, 3)).reshape(H, W, 9)
+        with np.errstate(all="ignore"):
+            local_med = np.nanmedian(win, axis=-1)
+        floater = valid_pixels & np.isfinite(local_med) & (merged < local_med * (1.0 - 5 * surface_tol))
+        merged[floater] = local_med[floater]
 
-        valid_ratio = valid_pixels.mean()
+        # --------------------------------------------------
+        # 7. 작은 구멍 채우기
+        # --------------------------------------------------
+        for _ in range(fill_iters):
+            holes = ~valid_pixels
+            if not holes.any():
+                break
+            pad_d = np.pad(np.where(valid_pixels, merged, 0.0), 1, mode="wrap")
+            pad_m = np.pad(valid_pixels.astype(np.float64), 1, mode="wrap")
+            s = np.lib.stride_tricks.sliding_window_view(pad_d, (3, 3)).sum(axis=(-1, -2))
+            c = np.lib.stride_tricks.sliding_window_view(pad_m, (3, 3)).sum(axis=(-1, -2))
+            fill = holes & (c > 0)
+            merged[fill] = s[fill] / c[fill]
+            valid_pixels = valid_pixels | fill
 
         print(
-            f"valid pixel ratio: "
-            f"{valid_ratio:.4f} "
-            f"({valid_pixels.sum()}/{H * W})"
+            f"valid pixel ratio: {valid_pixels.mean():.4f} "
+            f"({valid_pixels.sum()}/{H * W}), floaters fixed: {int(floater.sum())}"
         )
 
-        # Empty pixels -> 0
-        merged_distance[
-            ~valid_pixels
-        ] = 0.0
-
-        return merged_distance
+        merged[~valid_pixels] = 0.0
+        
+        return merged.astype(np.float32)
 
     def main(self, image_dir, image_names):
         ''' 
@@ -589,11 +771,15 @@ class PanoVggt:
 
         ref_idx = 0
         ref_pose = poses_np[ref_idx]
-        merged_depth_np = self.merged_distance_map(merged_xyz, ref_pose)
+        merged_depth_np = self.merged_distance_map(
+            merged_xyz, ref_pose,
+            ref_points_hw3=world_pts_np[ref_idx],
+            transform_path=os.path.join(image_dir, "ref_geometry", "ref_transform.npz"),
+        )
 
         print(f"\n✅ Done.  Results written to: {image_dir}")
         print("return merged_np")
 
-        breakpoint()
+        # breakpoint()
         # return depth_np, merged_depth_np
         return merged_depth_np

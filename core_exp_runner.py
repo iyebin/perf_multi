@@ -89,12 +89,12 @@ class CoreRunner:
         #         write_image(pjoin(self.exp_dir, f'normal_vis_{self.dataset.image_names[i]}.png'),
         #                     (self.dataset.ref_normals[i] * .5 + .5) * 255.)
         
-        breakpoint()
+        # breakpoint()
         for i in range(self.dataset.n_images):
             
             write_image(pjoin(self.exp_dir, f'distance_vis_.png'),
                         colorize_single_channel_image(
-                            (self.dataset.ref_distances[0][i].min() + 1e-6) / (self.dataset.ref_distances[0][i] + 1e-6)))
+                            (self.dataset.ref_distances.min() + 1e-6) / (self.dataset.ref_distances + 1e-6)))
             if self.dataset.ref_normals is not None:
                 write_image(pjoin(self.exp_dir, f'normal_vis_{self.dataset.image_names}.png'),
                             (self.dataset.ref_normals[i] * .5 + .5) * 255.)
@@ -110,7 +110,7 @@ class CoreRunner:
             self.sup_pool.register_sup_info(pose=self.dataset.poses[i],
                                                 mask=torch.ones([self.dataset.height, self.dataset.width]),
                                                 rgb=self.dataset.images[i],
-                                                distance=self.dataset.ref_distances[i],
+                                                distance=self.dataset.ref_distances,
                                                 normal=self.dataset.ref_normals[i],
                                                 log=True)
         self.sup_pool.gen_occ_grid(256)
@@ -199,7 +199,7 @@ class CoreRunner:
             for i in range(self.dataset.n_images):
                 render_result = self.scene.render(gen_pano_rays(self.dataset.poses[i], self.dataset.height, self.dataset.width), query_keys=['rgb', 'distance'])
                 pano_rgb = render_result['rgb']
-                breakpoint()
+                # breakpoint()
                 pano_distances = (render_result['distance'].min() / render_result['distance']).squeeze()[..., None]
                 write_image(pjoin(self.exp_dir, f'{i + 1}.png'), pano_rgb * 255.)
                 write_image(pjoin(self.exp_dir, f'{i + 1}_distance.png'), colorize_single_channel_image(pano_distances))

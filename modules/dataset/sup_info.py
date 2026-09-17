@@ -773,7 +773,7 @@ class SupInfoPool:
         union_count = union.sum().item()
         iou = intersection_count / max(union_count, 1)
 
-        breakpoint()
+        # breakpoint()
         
         print('view 0 only:', only_0.sum().item())
         print('view 1 only:', only_1.sum().item())
