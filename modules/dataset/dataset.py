@@ -234,26 +234,26 @@ class Dataset:
             np.save(self.ref_normal_path, self.ref_normals.cpu().numpy())
 
         # Save point cloud
-        pano_dirs = img_coord_to_pano_direction(img_coord_from_hw(self.height, self.width)) #just direction
-        pts = pano_dirs * self.ref_distances.squeeze()[..., None] #self.ref_distances 사용
-        pts = pts.cpu().numpy().reshape(-1, 3)
-        #check point numbers
-        points_count_path = pjoin(self.image_dir, 'ref_geometry', 'points_count.txt')
-        with open(points_count_path, 'w') as f:
-            f.write(f"all points number: {pts.shape[0]}\n")
+        # pano_dirs = img_coord_to_pano_direction(img_coord_from_hw(self.height, self.width)) #just direction
+        # pts = pano_dirs * self.ref_distances.squeeze()[..., None] #self.ref_distances 사용
+        # pts = pts.cpu().numpy().reshape(-1, 3)
+        # #check point numbers
+        # points_count_path = pjoin(self.image_dir, 'ref_geometry', 'points_count.txt')
+        # with open(points_count_path, 'w') as f:
+        #     f.write(f"all points number: {pts.shape[0]}\n")
 
-        colors = torch.stack(self.images, dim=0)
-        colors = colors.cpu().numpy().reshape(-1, 3)
+        # colors = torch.stack(self.images, dim=0)
+        # colors = colors.cpu().numpy().reshape(-1, 3)
 
-        assert pts.shape[0] == colors.shape[0], (pts.shape, colors.shape)
+        # assert pts.shape[0] == colors.shape[0], (pts.shape, colors.shape)
 
-        if self.images[0] is not None:
-            pcd = trimesh.PointCloud(pts, vertex_colors=colors) #color는 이미지 한 장에서만 가져오고 있음 => 다중 이미지로 수정
-        else:
-            pcd = trimesh.PointCloud(pts)
+        # if self.images[0] is not None:
+        #     pcd = trimesh.PointCloud(pts, vertex_colors=colors) #color는 이미지 한 장에서만 가져오고 있음 => 다중 이미지로 수정
+        # else:
+        #     pcd = trimesh.PointCloud(pts)
 
-        assert self.ref_geometry_path is not None and self.ref_geometry_path[-4:] == '.ply'
-        pcd.export(self.ref_geometry_path)
+        # assert self.ref_geometry_path is not None and self.ref_geometry_path[-4:] == '.ply'
+        # pcd.export(self.ref_geometry_path)
 
 
     def fit_scene_to_aabb(self, aabb_extent=0.9):
@@ -328,5 +328,5 @@ class WildDataset(Dataset):
         # self.fit_scene_to_aabb()
         #  self.normalization()
 
-        # self.save_ref_geometry()
+        self.save_ref_geometry()
 

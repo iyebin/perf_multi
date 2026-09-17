@@ -89,9 +89,9 @@ class CoreRunner:
         #         write_image(pjoin(self.exp_dir, f'normal_vis_{self.dataset.image_names[i]}.png'),
         #                     (self.dataset.ref_normals[i] * .5 + .5) * 255.)
         
-        # breakpoint()
+        breakpoint()
         for i in range(self.dataset.n_images):
-        
+            
             write_image(pjoin(self.exp_dir, f'distance_vis_.png'),
                         colorize_single_channel_image(
                             (self.dataset.ref_distances[0][i].min() + 1e-6) / (self.dataset.ref_distances[0][i] + 1e-6)))
