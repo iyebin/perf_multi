@@ -180,6 +180,122 @@ class PanoFusionNormalPredictor(GeoPredictor):
             optimizer.step()
 
         pano_normal = pano_normal_params * mask + ref_normal * (1. - mask)
-        return pano_normal.detach().permute(1, 2, 0).contiguous()
+
+        # 최종 normal normalize
+        pano_normal = pano_normal / (
+            torch.linalg.norm(pano_normal, ord=2, dim=0, keepdim=True) + 1e-8
+        )
+
+        # [3, H, W] -> [H, W, 3]
+        pano_normal = pano_normal.detach().permute(1, 2, 0).contiguous()
+
+        # normal + block 평균값 시각화
+        normal_vis = self.visualize_normal_block_mean(
+            pano_normal,
+            block_size=28,
+            decimals=2,
+            font_scale=0.4,
+            thickness=1,
+            draw_grid=True,
+            scale=4,
+        )
+
+        cv.imwrite(
+            "/data/intern01/normal_block_mean.png",
+            normal_vis
+        )
+
+        return pano_normal
+        # return pano_normal.detach().permute(1, 2, 0).contiguous()
+    @staticmethod
+    def visualize_normal_block_mean(
+        normal,
+        block_size=28, decimals=2,
+        font_scale=0.8, thickness=1,
+        draw_grid=True, scale=4,
+    ):
+        if isinstance(normal, torch.Tensor):
+            normal = normal.detach().cpu().numpy()
+
+        normal = normal.astype(np.float32)
+
+        H, W, C = normal.shape
+        assert C == 3, f"Expected (H, W, 3), got {normal.shape}"
+
+        # normal [-1, 1] → RGB [0, 255] → BGR
+        vis = np.clip((normal + 1.0) * 127.5, 0, 255).astype(np.uint8)
+        vis = cv.cvtColor(vis, cv.COLOR_RGB2BGR)
+        vis = cv.resize(
+            vis, (W * scale, H * scale),
+            interpolation=cv.INTER_NEAREST
+        )
+
+        font = cv.FONT_HERSHEY_SIMPLEX
+
+        for y in range(0, H, block_size):
+            for x in range(0, W, block_size):
+                y2 = min(y + block_size, H)
+                x2 = min(x + block_size, W)
+
+                vecs = normal[y:y2, x:x2].reshape(-1, 3)
+                vecs = vecs[np.isfinite(vecs).all(axis=1)]
+
+                if len(vecs) == 0:
+                    continue
+
+                mean_n = vecs.mean(axis=0)
+                norm = np.linalg.norm(mean_n)
+
+                if norm < 1e-6:
+                    continue
+
+                nx, ny, nz = mean_n / norm
+                text = f"{nx:+.{decimals}f},{ny:+.{decimals}f},{nz:+.{decimals}f}"
+
+                x1s, y1s = x * scale, y * scale
+                x2s, y2s = x2 * scale, y2 * scale
+                cx, cy = (x1s + x2s) // 2, (y1s + y2s) // 2
+
+                (tw, th), base = cv.getTextSize(
+                    text, font, font_scale, thickness
+                )
+
+                tx = int(np.clip(
+                    cx - tw / 2,
+                    0,
+                    W * scale - tw - 1
+                ))
+                ty = int(np.clip(
+                    cy + th / 2,
+                    th,
+                    H * scale - base - 1
+                ))
+
+                cv.rectangle(
+                    vis,
+                    (tx - 2, ty - th - 2),
+                    (tx + tw + 2, ty + base + 2),
+                    (0, 0, 0),
+                    -1
+                )
+
+                cv.putText(
+                    vis, text, (tx, ty),
+                    font, font_scale,
+                    (255, 255, 255),
+                    thickness,
+                    cv.LINE_AA
+                )
+
+                if draw_grid:
+                    cv.rectangle(
+                        vis,
+                        (x1s, y1s),
+                        (x2s - 1, y2s - 1),
+                        (40, 40, 40),
+                        1
+                    )
+
+        return vis
 
 

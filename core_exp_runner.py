@@ -20,7 +20,7 @@ from modules.geo_predictors import PanoJointPredictor
 # from modules.geo_predictors import RePanoJointPredictor
 from modules.dataset.dataset import WildDataset
 from modules.dataset.sup_info import SupInfoPool
-from modules.pose_sampler import CirclePoseSampler
+# from modules.pose_sampler import CirclePoseSampler
 from modules.pose_sampler import DenseTravelPoseSampler
 from modules.pose_sampler import GRFCirclePoseSampler
 from modules.pose_sampler import MiddlePanoramaSampler
@@ -92,15 +92,16 @@ class CoreRunner:
         # breakpoint()
         for i in range(self.dataset.n_images):
             
-            write_image(pjoin(self.exp_dir, f'distance_vis_.png'),
+            write_image(pjoin(self.exp_dir, f'distance_vis_{i}.png'),
                         colorize_single_channel_image(
-                            (self.dataset.ref_distances.min() + 1e-6) / (self.dataset.ref_distances + 1e-6)))
+                            (self.dataset.ref_distances.min[0][i]() + 1e-6) / (self.dataset.ref_distances[0][i] + 1e-6)))
             if self.dataset.ref_normals is not None:
                 write_image(pjoin(self.exp_dir, f'normal_vis_{self.dataset.image_names}.png'),
                             (self.dataset.ref_normals[i] * .5 + .5) * 255.)
 
         # self.pose_sampler_0 = MiddlePanoramaSampler(base_point=[0.0, 0.0, 0.0], another=self.dataset.trans)
-        self.pose_sampler_0 = CirclePoseSampler(self.dataset.ref_distances, self.dataset.poses, **conf.pose_sampler)
+        # self.pose_sampler_0 = CirclePoseSampler(self.dataset.ref_distances, self.dataset.poses, **conf.pose_sampler)
+        self.pose_sampler_0 = MiddlePanoramaSampler(self.dataset.poses)
         # self.pose_sampler = MiddlePanoramaSampler(self.dataset.poses)
 
         self.sup_pool = SupInfoPool()
@@ -110,7 +111,7 @@ class CoreRunner:
             self.sup_pool.register_sup_info(pose=self.dataset.poses[i],
                                                 mask=torch.ones([self.dataset.height, self.dataset.width]),
                                                 rgb=self.dataset.images[i],
-                                                distance=self.dataset.ref_distances,
+                                                distance=self.dataset.ref_distances[0][i],
                                                 normal=self.dataset.ref_normals[i],
                                                 log=True)
         self.sup_pool.gen_occ_grid(256)

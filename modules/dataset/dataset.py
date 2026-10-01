@@ -183,6 +183,8 @@ class Dataset:
                 ref_distance.astype(np.float32)
             ).cuda()
 
+        breakpoint() #distance 범위 확인
+
         return ref_distances
 
 
@@ -265,46 +267,46 @@ class Dataset:
 
         # Save point cloud : PanoVggt.merged_distance_map 의 역변환
         #   pixel -> dir_perf -> p_perf = dir * d -> p_cam = R^T p_perf -> p_world = ref_c2w p_cam
-        ref_idx = 0
-        dist = self.ref_distances.squeeze().float().cpu().numpy().astype(np.float64)  # (H, W)
-        Hd, Wd = dist.shape
-        valid = np.isfinite(dist) & (dist > 0)
+        # ref_idx = 0
+        # dist = self.ref_distances.squeeze().float().cpu().numpy().astype(np.float64)  # (H, W)
+        # Hd, Wd = dist.shape
+        # valid = np.isfinite(dist) & (dist > 0)
 
-        pano_dirs = img_coord_to_pano_direction(img_coord_from_hw(Hd, Wd)).float().cpu().numpy().astype(np.float64)
-        pano_dirs /= np.linalg.norm(pano_dirs, axis=-1, keepdims=True)
-        pts_perf = (pano_dirs * dist[..., None])[valid]                      # (N, 3) PeRF pano 좌표
+        # pano_dirs = img_coord_to_pano_direction(img_coord_from_hw(Hd, Wd)).float().cpu().numpy().astype(np.float64)
+        # pano_dirs /= np.linalg.norm(pano_dirs, axis=-1, keepdims=True)
+        # pts_perf = (pano_dirs * dist[..., None])[valid]                      # (N, 3) PeRF pano 좌표
 
-        # forward 에서 검증/보정된 변환 사용 (없으면 원래 가정으로 fallback)
-        transform_path = pjoin(self.image_dir, 'ref_geometry', 'ref_transform.npz')
-        if os.path.exists(transform_path):
-            T = np.load(transform_path)
-            ref_c2w = T['ref_c2w'].astype(np.float64)
-            R_cam2perf = T['R_cam2perf'].astype(np.float64)
-        else:
-            print(f"[save_ref_geometry][warn] {transform_path} 없음 → c2w + OpenCV->PeRF 가정 사용")
-            ref_c2w = np.load(pjoin(self.image_dir, 'all_poses.npy'))[ref_idx].astype(np.float64)
-            R_cam2perf = np.array([[ 0,  0, 1],
-                                   [-1,  0, 0],
-                                   [ 0, -1, 0]], dtype=np.float64)
+        # # forward 에서 검증/보정된 변환 사용 (없으면 원래 가정으로 fallback)
+        # transform_path = pjoin(self.image_dir, 'ref_geometry', 'ref_transform.npz')
+        # if os.path.exists(transform_path):
+        #     T = np.load(transform_path)
+        #     ref_c2w = T['ref_c2w'].astype(np.float64)
+        #     R_cam2perf = T['R_cam2perf'].astype(np.float64)
+        # else:
+        #     print(f"[save_ref_geometry][warn] {transform_path} 없음 → c2w + OpenCV->PeRF 가정 사용")
+        #     ref_c2w = np.load(pjoin(self.image_dir, 'all_poses.npy'))[ref_idx].astype(np.float64)
+        #     R_cam2perf = np.array([[ 0,  0, 1],
+        #                            [-1,  0, 0],
+        #                            [ 0, -1, 0]], dtype=np.float64)
 
-        pts_cam = pts_perf @ R_cam2perf                                      # = R^T p (직교행렬)
-        pts = pts_cam @ ref_c2w[:3, :3].T + ref_c2w[:3, 3]                   # PanoVGGT world 좌표
+        # pts_cam = pts_perf @ R_cam2perf                                      # = R^T p (직교행렬)
+        # pts = pts_cam @ ref_c2w[:3, :3].T + ref_c2w[:3, 3]                   # PanoVGGT world 좌표
 
-        # check point numbers
-        points_count_path = pjoin(self.image_dir, 'ref_geometry', 'points_count.txt')
-        with open(points_count_path, 'w') as f:
-            f.write(f"all points number: {pts.shape[0]}\n")
+        # # check point numbers
+        # points_count_path = pjoin(self.image_dir, 'ref_geometry', 'points_count.txt')
+        # with open(points_count_path, 'w') as f:
+        #     f.write(f"all points number: {pts.shape[0]}\n")
 
-        img = self.images[ref_idx].float().cpu().numpy()
-        if img.shape[:2] != (Hd, Wd):
-            img = cv.resize(img, (Wd, Hd), interpolation=cv.INTER_AREA)
-        colors = (np.clip(img[valid], 0, 1) * 255).astype(np.uint8)
+        # img = self.images[ref_idx].float().cpu().numpy()
+        # if img.shape[:2] != (Hd, Wd):
+        #     img = cv.resize(img, (Wd, Hd), interpolation=cv.INTER_AREA)
+        # colors = (np.clip(img[valid], 0, 1) * 255).astype(np.uint8)
 
-        assert pts.shape[0] == colors.shape[0], (pts.shape, colors.shape)
+        # assert pts.shape[0] == colors.shape[0], (pts.shape, colors.shape)
 
-        pcd = trimesh.PointCloud(pts, vertex_colors=colors)
-        assert self.ref_geometry_path is not None and self.ref_geometry_path[-4:] == '.ply'
-        pcd.export(self.ref_geometry_path)
+        # pcd = trimesh.PointCloud(pts, vertex_colors=colors)
+        # assert self.ref_geometry_path is not None and self.ref_geometry_path[-4:] == '.ply'
+        # pcd.export(self.ref_geometry_path)
 
     def fit_scene_to_aabb(self, aabb_extent=0.9):
         """camera(c2w) + depth가 NeRF AABB [-1,1] 안에 들어오도록 균등 스케일."""
@@ -365,13 +367,36 @@ class WildDataset(Dataset):
             assert all(s == shapes[0] for s in shapes), "Shapes must be equal for all images"
             self.height, self.width, _ = self.images[0].shape
 
-        
-
         self.case_name = os.path.basename(self.image_dir)
 
-        
-
         _, self.ref_normals = self.get_joint_distance_normal()
+        # ── normal 값 확인용 visualization ──
+        normal_vis_dir = pjoin(self.image_dir, "ref_normal_debuug")
+        os.makedirs(normal_vis_dir, exist_ok=True)
+
+        normals = self.ref_normals
+
+        # 단일 normal이면 (H,W,3) -> (1,H,W,3)
+        if normals.ndim == 3:
+            normals = normals.unsqueeze(0)
+
+        for i in range(normals.shape[0]):
+            vis = PanoFusionNormalPredictor.visualize_normal_block_mean(
+                normals[i],
+                block_size=28,
+                decimals=2,
+                font_scale=0.4,
+                thickness=1,
+                draw_grid=True,
+                scale=4,
+            )
+
+            cv.imwrite(
+                pjoin(normal_vis_dir, f"{self.image_names[i]}_normal_block_mean.png"),
+                vis
+            )
+        print("Done normal debug")
+        breakpoint()
         self.ref_distances = self.get_panovggt_distance()
         print("shape 체크(distances)")
         # breakpoint()
@@ -379,4 +404,7 @@ class WildDataset(Dataset):
         #  self.normalization()
 
         self.save_ref_geometry()
+
+
+
 

@@ -12,7 +12,7 @@ from scipy.ndimage import minimum_filter1d, gaussian_filter1d
 class MiddlePanoramaSampler(PoseSampler):
     """두 pose 사이를 따라 이동하면서 각 지점에서 horizontal sampling"""
 
-    def __init__(self, poses, n_horizontal=3):
+    def __init__(self, poses):
         """
         poses: (2, 4, 4)
         n_interp: pose1→pose2 사이 몇 개 지점
@@ -20,11 +20,12 @@ class MiddlePanoramaSampler(PoseSampler):
         n_horizontal: 각 지점당 horizontal 샘플 개수
         """
         super().__init__()
+        n_poses = len(poses)
         poses = torch.stack(poses)
-        poses = torch.inverse(poses) #camera to world transform
+        # poses = torch.inverse(poses) #camera to world transform
         
         p0 = poses[0][:3, 3]
-        p1 = poses[1][:3, 3]
+        p1 = poses[n_poses-1][:3, 3]
 
         p0 = torch.as_tensor(p0, dtype=torch.float32)
         p1 = torch.as_tensor(p1, dtype=torch.float32)
