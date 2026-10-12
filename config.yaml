@@ -6,8 +6,8 @@ is_continue: false
 dataset_class_name: BMW
 dataset:
   image_resize:
-  - 2048
-  - 1024
+  - 1036
+  - 518
   image_dir: /data/intern01/PeRF_multi/example_data/bmw_sample_132/132_to_180
   x:
   - 0

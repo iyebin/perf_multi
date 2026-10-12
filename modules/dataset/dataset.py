@@ -396,7 +396,6 @@ class WildDataset(Dataset):
                 vis
             )
         print("Done normal debug")
-        breakpoint()
         self.ref_distances = self.get_panovggt_distance()
         print("shape 체크(distances)")
         # breakpoint()

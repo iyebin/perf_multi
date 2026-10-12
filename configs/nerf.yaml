@@ -9,7 +9,7 @@ is_continue: false
 
 dataset_class_name: BMW
 dataset:
-  image_resize: [2048, 1024]
+  image_resize: [1036, 518]
   image_dir: ./example_data/BMW
   x: [0, 1.5, 0, 1.5]
   y: [27.5, 27.5, 4, 4]

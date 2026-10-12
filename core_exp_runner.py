@@ -94,7 +94,7 @@ class CoreRunner:
             
             write_image(pjoin(self.exp_dir, f'distance_vis_{i}.png'),
                         colorize_single_channel_image(
-                            (self.dataset.ref_distances[0][i].min() + 1e-6) / (self.dataset.ref_distances[0][i] + 1e-6)))
+                            (self.dataset.ref_distances[i].min() + 1e-6) / (self.dataset.ref_distances[i] + 1e-6)))
             if self.dataset.ref_normals is not None:
                 write_image(pjoin(self.exp_dir, f'normal_vis_{self.dataset.image_names}.png'),
                             (self.dataset.ref_normals[i] * .5 + .5) * 255.)
@@ -111,7 +111,7 @@ class CoreRunner:
             self.sup_pool.register_sup_info(pose=self.dataset.poses[i],
                                                 mask=torch.ones([self.dataset.height, self.dataset.width]),
                                                 rgb=self.dataset.images[i],
-                                                distance=self.dataset.ref_distances[0][i],
+                                                distance=self.dataset.ref_distances[i],
                                                 normal=self.dataset.ref_normals[i],
                                                 log=True)
         self.sup_pool.gen_occ_grid(256)
