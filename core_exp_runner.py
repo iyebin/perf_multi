@@ -90,12 +90,11 @@ class CoreRunner:
         #         write_image(pjoin(self.exp_dir, f'normal_vis_{self.dataset.image_names[i]}.png'),
         #                     (self.dataset.ref_normals[i] * .5 + .5) * 255.)
         
-        # breakpoint()
         for i in range(self.dataset.n_images):
             
             write_image(pjoin(self.exp_dir, f'distance_vis_{i}.png'),
                         colorize_single_channel_image(
-                            (self.dataset.ref_distances.min[0][i]() + 1e-6) / (self.dataset.ref_distances[0][i] + 1e-6)))
+                            (self.dataset.ref_distances[0][i].min() + 1e-6) / (self.dataset.ref_distances[0][i] + 1e-6)))
             if self.dataset.ref_normals is not None:
                 write_image(pjoin(self.exp_dir, f'normal_vis_{self.dataset.image_names}.png'),
                             (self.dataset.ref_normals[i] * .5 + .5) * 255.)
@@ -234,14 +233,12 @@ class CoreRunner:
         ic('Train: begin')
         if self.phase < 0:
             self.set_train()
-            # breakpoint()
             self.scene.fit(self.sup_pool)
 
             #pose = I, 중심 좌표계의 rgb 이미지와 distance 이미지
             for i in range(self.dataset.n_images):
                 render_result = self.scene.render(gen_pano_rays(self.dataset.poses[i], self.dataset.height, self.dataset.width), query_keys=['rgb', 'distance'])
                 pano_rgb = render_result['rgb']
-                # breakpoint()
                 pano_distances = (render_result['distance'].min() / render_result['distance']).squeeze()[..., None]
                 write_image(pjoin(self.exp_dir, f'{i + 1}.png'), pano_rgb * 255.)
                 write_image(pjoin(self.exp_dir, f'{i + 1}_distance.png'), colorize_single_channel_image(pano_distances))
@@ -417,7 +414,6 @@ class CoreRunner:
 
     @torch.no_grad()
     def extract_panorama(self, out_dir="anchor_images"):
-        # breakpoint()
         device = self.device
         ratios=[0.2, 0.4, 0.6]
         # target = self.pose_sampler_0.anchor_pts
