@@ -14,6 +14,7 @@ from tqdm import tqdm
 import hydra
 
 from icecream import ic
+from pathlib import Path
 
 from modules.inpainters import PanoPersFusionInpainter
 from modules.geo_predictors import PanoJointPredictor
@@ -184,10 +185,50 @@ class CoreRunner:
 
             method(self.sup_pool)
 
+        elif mode == 'get_masked':
+            mask_path = Path("masking/132_valid_mask.png")
+            render_dir = Path("/data/intern01/perf/single_pano/132_removed/WildDataset_132_to_180/nerf_experiment/specific_images/x_n/rgb")          # NeRF 생성 이미지 폴더
+            output_dir = Path("/data/intern01/perf/single_pano/132_removed/WildDataset_132_to_180/nerf_experiment/masked_renders")
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            self.save_png(mask_path, render_dir, output_dir)
+
     def check_occ(self, sup_pool, h, w):
         self.scene.diagnose_culling_re(sup_pool, h, w)
         self.scene.check_grid_coverage(sup_pool)
 
+    def save_png(self, mask_path, render_dir, output_dir):
+        mask = self.read_image(mask_path, cv.IMREAD_GRAYSCALE)
+        all_mse = []
+        all_psnr = []
+
+
+        for image_path in sorted(render_dir.iterdir()):
+            if image_path.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+                continue
+
+            rendered = self.read_image(image_path)
+            h, w = rendered.shape[:2]
+
+            # 동일한 투영·화각에서 해상도만 다른 경우 조정
+            resized_mask = cv.resize(
+                mask, (w, h),
+                interpolation=cv.INTER_NEAREST,
+            )
+
+            masked = rendered.copy()
+            masked[resized_mask == 0] = 0
+
+            save_path = output_dir / f"{image_path.stem}_masked.png"
+            self.save_png(save_path, masked)
+            print(f"저장: {save_path}")
+
+            gt = self.read_image(self.dataset.image_dir).astype(np.float32) / 255.0
+            pred = rendered.astype(np.float32) / 255.0
+            valid = resized_mask > 0
+
+            mse = np.mean((gt[valid] - pred[valid]) ** 2)
+            psnr = np.inf if mse == 0 else -10 * np.log10(mse)
 
     def train(self, raw_only=False):
         ic('Train: begin')
@@ -432,7 +473,7 @@ class CoreRunner:
         y = np.arange(0, 0.1, 0.01)
         for ys in y:
             for xs in x:
-                position=[-xs, -ys, 0.0000]
+                position=[-xs, 0.0000, 0.0000]
                 path_rgb = pjoin(out_rgb, f'rgb_{position}.png')
                 path_distance = pjoin(out_distance, f'distance_{position}.png')
                 pose = torch.eye(4, device=device)
