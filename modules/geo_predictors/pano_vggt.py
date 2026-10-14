@@ -230,78 +230,178 @@ class PanoVggt:
                 out[k] = v
 
         return out
-    
-    def visualize_depth_block_mean(
-        self, depth, valid_mask=None, block_size=14, decimals=1,
-        colormap=cv2.COLORMAP_TURBO, use_log=True,
-        font_scale=0.35, thickness=1, draw_grid=True, scale=4,
-    ):
-        H, W = depth.shape
-        vis = self.depth_to_colormap(depth, valid_mask, colormap, use_log)
 
-        vis = cv2.resize(vis, (W * scale, H * scale), interpolation=cv2.INTER_NEAREST)
+    # def merged_distance_map(self, merged_xyz, ref_pose, H=518, W=1036,
+    #                     ref_points_hw3=None, transform_path=None,
+    #                     surface_tol=0.03, fill_iters=3):
 
-        font = cv2.FONT_HERSHEY_SIMPLEX
+    #     """
+    #     merged_xyz : (N, 3)
+    #         PanoVGGT world-frame points
 
-        for y in range(0, H, block_size):
-            for x in range(0, W, block_size):
-                y2 = min(y + block_size, H)
-                x2 = min(x + block_size, W)
+    #     ref_pose : (4, 4)
+    #         PanoVGGT camera-to-world pose (OpenCV c2w)
 
-                patch = depth[y:y2, x:x2]
-                mask = np.isfinite(patch)
+    #     return:
+    #         merged_distance : (H, W)
+    #         reference panorama 기준 Euclidean distance map
+    #     """
 
-                if valid_mask is not None:
-                    mask &= valid_mask[y:y2, x:x2]
+    #     assert merged_xyz.ndim == 2
+    #     assert merged_xyz.shape[1] == 3
+    #     assert ref_pose.shape == (4, 4)
 
-                if not mask.any():
-                    continue
+    #     # --------------------------------------------------
+    #     # 1. world -> reference camera
+    #     #
+    #     # PanoVGGT ref_pose = c2w
+    #     # therefore inverse(ref_pose) = w2c
+    #     # --------------------------------------------------
+    #     ref_w2c = np.linalg.inv(ref_pose)
 
-                text = f"{patch[mask].mean():.{decimals}f}"
+    #     ones = np.ones(
+    #         (merged_xyz.shape[0], 1),
+    #         dtype=merged_xyz.dtype
+    #     )
 
-                x1s, y1s = x * scale, y * scale
-                x2s, y2s = x2 * scale, y2 * scale
-                cx, cy = (x1s + x2s) // 2, (y1s + y2s) // 2
+    #     points_h = np.concatenate(
+    #         [merged_xyz, ones],
+    #         axis=1
+    #     )
 
-                (tw, th), base = cv2.getTextSize(text, font, font_scale, thickness)
+    #     points_cam_h = (
+    #         ref_w2c @ points_h.T
+    #     ).T
 
-                tx = int(np.clip(cx - tw / 2, 0, W * scale - tw - 1))
-                ty = int(np.clip(cy + th / 2, th, H * scale - base - 1))
+    #     # OpenCV camera coordinates
+    #     points_cv = points_cam_h[:, :3]
 
-                cv2.rectangle(vis, (tx - 1, ty - th - 1), (tx + tw + 1, ty + base + 1), (0, 0, 0), -1)
+    #     # --------------------------------------------------
+    #     # 2. distance from reference camera
+    #     #
+    #     # Euclidean/ray distance
+    #     # --------------------------------------------------
+    #     distance = np.linalg.norm(
+    #         points_cv,
+    #         axis=1
+    #     )
 
-                cv2.putText(vis, text, (tx, ty), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    #     valid = (
+    #         np.isfinite(points_cv).all(axis=1)
+    #         & np.isfinite(distance)
+    #         & (distance > 1e-6)
+    #     )
 
-                if draw_grid:
-                    cv2.rectangle(vis, (x1s, y1s), (x2s - 1, y2s - 1), (40, 40, 40), 1)
+    #     points_cv = points_cv[valid]
+    #     distance = distance[valid]
 
-        return vis
-    
-    def block_mean_grid(self, depth, valid_mask=None, block_size=7):
-        H, W = depth.shape
+    #     # --------------------------------------------------
+    #     # 3. OpenCV camera coordinates
+    #     #          ->
+    #     #    PeRF panorama local coordinates
+    #     #
+    #     # OpenCV:
+    #     #   +X = right
+    #     #   +Y = down
+    #     #   +Z = forward
+    #     #
+    #     # PeRF pano:
+    #     #   +X = forward
+    #     #   -Y = right
+    #     #   -Z = down
+    #     # --------------------------------------------------
+    #     points_perf = np.stack(
+    #     [
+    #         points_cv[:, 2],    # PeRF X = OpenCV Z
+    #         -points_cv[:, 0],   # PeRF Y = -OpenCV X
+    #         -points_cv[:, 1],   # PeRF Z = -OpenCV Y
+    #     ], axis=1)
 
-        gh = (H + block_size - 1) // block_size
-        gw = (W + block_size - 1) // block_size
+    #     # --------------------------------------------------
+    #     # 4. points -> unit directions
+    #     # --------------------------------------------------
+    #     dirs_perf = (
+    #         points_perf
+    #         / distance[:, None]
+    #     )
 
-        grid = np.full((gh, gw), np.nan, dtype=np.float32)
+    #     # --------------------------------------------------
+    #     # 5. direction -> ERP image coordinates
+    #     #
+    #     # PeRF 자체 convention 사용
+    #     # output:
+    #     #   img_coord[:, 0] = normalized row [0,1]
+    #     #   img_coord[:, 1] = normalized col [0,1]
+    #     # --------------------------------------------------
 
-        for by, y in enumerate(range(0, H, block_size)):
-            for bx, x in enumerate(range(0, W, block_size)):
-                y2 = min(y + block_size, H)
-                x2 = min(x + block_size, W)
+    #     dirs_t = torch.from_numpy(
+    #     dirs_perf.astype(np.float32)
+    #     )
 
-                patch = depth[y:y2, x:x2]
+    #     img_coord = (
+    #         direction_to_img_coord(dirs_t)
+    #         .cpu()
+    #         .numpy()
+    #     )
 
-                mask = np.isfinite(patch)
+    #     v = np.floor(
+    #         img_coord[:, 0] * H
+    #     ).astype(np.int32)
 
-                if valid_mask is not None:
-                    mask &= valid_mask[y:y2, x:x2]
+    #     u = np.floor(
+    #         img_coord[:, 1] * W
+    #     ).astype(np.int32)
 
-                if mask.any():
-                    grid[by, bx] = patch[mask].mean()
 
-        return grid
-        
+    #     # ERP horizontal seam: wrap around
+    #     u = u % W
+
+    #     # top / bottom
+    #     v = np.clip(
+    #         v,
+    #         0,
+    #         H - 1
+    #     )
+
+    #     # --------------------------------------------------
+    #     # 6. spherical z-buffer
+    #     #
+    #     # 같은 ERP pixel에 여러 point가 투영되면
+    #     # reference camera에서 가장 가까운 point 선택
+    #     # --------------------------------------------------
+
+    #     merged_distance = np.full(
+    #     (H, W),
+    #     np.inf,
+    #     dtype=np.float32
+    #     )
+
+    #     np.minimum.at(
+    #         merged_distance,
+    #         (v, u),
+    #         distance.astype(np.float32)
+    #     )
+
+    #     # 7. validity statistics
+    #     valid_pixels = np.isfinite(
+    #         merged_distance
+    #     )
+
+    #     valid_ratio = valid_pixels.mean()
+
+    #     print(
+    #         f"valid pixel ratio: "
+    #         f"{valid_ratio:.4f} "
+    #         f"({valid_pixels.sum()}/{H * W})"
+    #     )
+
+    #     # Empty pixels -> 0
+    #     merged_distance[
+    #         ~valid_pixels
+    #     ] = 0.0
+
+    #     return merged_distance
+
     def main(self, image_dir, image_names):
         ''' 
         return: distances, normals
@@ -403,90 +503,37 @@ class PanoVggt:
 
             # Load and resize mask to inference resolution
             mask_valid: Optional[np.ndarray] = None
-          
+            # if mask_paths is not None and mask_paths[i] is not None:
+            #     mask_valid = load_mask(mask_paths[i], H, W)
+            #     if mask_valid is not None:
+            #         print(f"  mask: {mask_paths[i]}  "
+            #             f"valid={mask_valid.sum():,}/{H * W:,} px "
+            #             f"({100.0 * mask_valid.mean():.1f} %)")
+            # else:
+            #     print("  mask: (none — all pixels valid)")
+
+            # ── depth map ─────────────────────────────────────────────────────
             if depth_np is not None:
-                d = depth_np[i]  # (H, W)
-                print(f"\n🧬d: {d}")
+                d = depth_np[i]                                 # (H, W)
 
-                valid = np.isfinite(d) & (d > 0)
-
-                # --------------------------------
-                # 기존 depth colormap
-                # --------------------------------
+                # coloured visualisation
                 colored = self.depth_to_colormap(
                     d,
-                    valid_mask=valid,
+                    valid_mask=mask_valid,
                     use_log=True,
                     colormap=cv2.COLORMAP_TURBO,
                 )
-
-                out_depth_path = os.path.join(
-                    image_dir,
-                    f"{stem}_depth.png"
-                )
-
+                out_depth_path = os.path.join(image_dir, f"{stem}_depth.png")
                 cv2.imwrite(out_depth_path, colored)
 
-                # --------------------------------
-                # 7x7 block 평균 시각화
-                # --------------------------------
-                depth_vis = self.visualize_depth_block_mean(
-                    depth=d,
-                    valid_mask=valid,
-                    block_size=28,
-                    decimals=1,
-                    font_scale=1.2,
-                    draw_grid=True,
-                    scale=4,
-                )
-
+                # raw 16-bit depth (millimetres, masked invalid → 0)
+                d_mm = (d * 1000.0).astype(np.float32)
+                if mask_valid is not None:
+                    d_mm[~mask_valid] = 0.0
+                d_u16 = np.clip(d_mm, 0, 65535).astype(np.uint16)
                 cv2.imwrite(
-                    os.path.join(
-                        image_dir,
-                        f"{stem}_depth_block_mean.png"
-                    ),
-                    depth_vis,
+                    os.path.join(image_dir, f"{stem}_depth_raw.png"), d_u16
                 )
-
-                # --------------------------------
-                # 7x7 block 평균 grid
-                # --------------------------------
-                mean_grid = self.block_mean_grid(
-                    depth=d,
-                    valid_mask=valid,
-                    block_size=1,
-                )
-
-                np.savetxt(
-                    os.path.join(
-                        image_dir,
-                        f"{stem}_depth_block_mean.txt"
-                    ),
-                    mean_grid,
-                    fmt="%.3f",
-                    delimiter="\t",
-                )
-
-                # --------------------------------
-                # raw depth
-                # --------------------------------
-                d_mm = d * 1000.0
-                d_mm[~valid] = 0.0
-
-                d_u16 = np.clip(
-                    d_mm,
-                    0,
-                    65535,
-                ).astype(np.uint16)
-
-                cv2.imwrite(
-                    os.path.join(
-                        image_dir,
-                        f"{stem}_depth_raw.png"
-                    ),
-                    d_u16,
-                )
-
                 print(f"  depth: saved → {out_depth_path}")
 
             # ── camera pose ───────────────────────────────────────────────────
@@ -527,11 +574,22 @@ class PanoVggt:
                 all_rgb.append(rgb_w)
 
         # ── merged point cloud ────────────────────────────────────────────────
+        global_max = max(d.max().item() for d in depth_np)
+        scale = global_max * 1.05
+
+        # Depth 정규화
+        breakpoint() #depth/pose/merged_xyz가 제대로 normalization 됐는지 확인하기
+        depth_np = depth_np / scale
+        
         if all_xyz:
             merged_xyz = np.concatenate(all_xyz, axis=0)
             merged_rgb = np.concatenate(all_rgb, axis=0)
-            self.save_ply(os.path.join(image_dir, "ref_geometry", "ref_geometry.ply"), merged_xyz, merged_rgb)
-            print(f"\n[pipeline] Merged cloud: {len(merged_xyz):,} points total.")
+
+            # PanoVGGT world point cloud
+            norm_xyz = merged_xyz / scale
+
+            self.save_ply(os.path.join(image_dir, "ref_geometry", "ref_geometry.ply"), norm_xyz, merged_rgb)
+            print(f"\n[pipeline] Merged cloud: {len(norm_xyz):,} points total.")
 
         # ── save all poses together ───────────────────────────────────────────
         if poses_np is not None:
@@ -542,8 +600,17 @@ class PanoVggt:
             )
             print(f"[pipeline] All poses  saved → {image_dir}/all_poses.npy")
 
-        print(f"\n✅ Done.  Results written to: {image_dir}")
+        # ref_idx = 0
+        # ref_pose = poses_np[ref_idx]
+        # merged_depth_np = self.merged_distance_map(
+        #     merged_xyz, ref_pose,
+        #     ref_points_hw3=world_pts_np[ref_idx],
+        #     transform_path=os.path.join(image_dir, "ref_geometry", "ref_transform.npz"),
+        # )
+
         
+
+        print(f"\n✅ Done.  Results written to: {image_dir}")
         print("depth_np")
 
         return depth_np

@@ -183,7 +183,7 @@ class Dataset:
                 ref_distance.astype(np.float32)
             ).cuda()
 
-        breakpoint() #distance 범위 확인
+        # breakpoint()
 
         return ref_distances
 
@@ -206,20 +206,7 @@ class Dataset:
       
     #     self.ref_distances /= scale
 
-    # def normalization(self):
-    #     # 모든 depth와 pose translation에 동일한 scale 적용
-    #     global_max = max(d.max().item() for d in self.ref_distances)
-    #     scale = global_max * 1.05
-
-    #     # Depth 정규화
-    #     breakpoint()
-    #     self.ref_distances = self.ref_distances / scale
-
-    #     # Pose translation 정규화
-    #     self.ref_poses = self.ref_poses.clone()
-    #     self.ref_poses[:, :3, 3] /= scale
-
-    #     self.normalization_scale = scale
+    
 
     # def save_ref_geometry(self):
     #     # Save distance and normal data
@@ -370,40 +357,8 @@ class WildDataset(Dataset):
         self.case_name = os.path.basename(self.image_dir)
 
         _, self.ref_normals = self.get_joint_distance_normal()
-        # ── normal 값 확인용 visualization ──
-        normal_vis_dir = pjoin(self.image_dir, "ref_normal_debuug")
-        os.makedirs(normal_vis_dir, exist_ok=True)
-
-        normals = self.ref_normals
-
-        # 단일 normal이면 (H,W,3) -> (1,H,W,3)
-        if normals.ndim == 3:
-            normals = normals.unsqueeze(0)
-
-        for i in range(normals.shape[0]):
-            vis = PanoFusionNormalPredictor.visualize_normal_block_mean(
-                normals[i],
-                block_size=28,
-                decimals=2,
-                font_scale=0.4,
-                thickness=1,
-                draw_grid=True,
-                scale=4,
-            )
-
-            cv.imwrite(
-                pjoin(normal_vis_dir, f"{self.image_names[i]}_normal_block_mean.png"),
-                vis
-            )
-        print("Done normal debug")
         self.ref_distances = self.get_panovggt_distance()
         print("shape 체크(distances)")
-        # breakpoint()
-        # self.fit_scene_to_aabb()
-        #  self.normalization()
 
         self.save_ref_geometry()
-
-
-
 
