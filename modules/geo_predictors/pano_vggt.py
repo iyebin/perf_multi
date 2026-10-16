@@ -576,17 +576,19 @@ class PanoVggt:
         # ── merged point cloud ────────────────────────────────────────────────
         global_max = max(d.max().item() for d in depth_np)
         scale = global_max * 1.05
-
-        # Depth 정규화
-        breakpoint() #depth/pose/merged_xyz가 제대로 normalization 됐는지 확인하기
-        depth_np = depth_np / scale
         
         if all_xyz:
             merged_xyz = np.concatenate(all_xyz, axis=0)
             merged_rgb = np.concatenate(all_rgb, axis=0)
 
+            world_scale = float(np.abs(merged_xyz).max()) * 1.05
+
+            # Depth 정규화
+            breakpoint() #depth/pose/merged_xyz가 제대로 normalization 됐는지 확인하기
+            depth_np = depth_np / world_scale
+
             # PanoVGGT world point cloud
-            norm_xyz = merged_xyz / scale
+            norm_xyz = merged_xyz / world_scale
 
             self.save_ply(os.path.join(image_dir, "ref_geometry", "ref_geometry.ply"), norm_xyz, merged_rgb)
             print(f"\n[pipeline] Merged cloud: {len(norm_xyz):,} points total.")

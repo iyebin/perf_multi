@@ -1,5 +1,5 @@
 device:
-  base_exp_dir: /data/intern01/perf/multi_pano/baseline_5m/img5
+  base_exp_dir: /data/intern01/perf/multi_pano/baseline_5m/img5_world_norm
 exp_name: nerf_experiment
 mode: train
 is_continue: false
