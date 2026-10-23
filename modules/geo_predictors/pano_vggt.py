@@ -126,6 +126,118 @@ class PanoVggt:
 
         return colored
 
+    def visualize_depth_block_mean(
+        self,
+        depth,
+        valid_mask=None,
+        block_size=37,
+        decimals=1,
+        colormap=cv2.COLORMAP_TURBO,
+        use_log=True,
+        font_scale=0.8,
+        thickness=2,
+        draw_grid=True,
+        scale=4,
+    ):
+        H, W = depth.shape
+
+        # 1. Depth → Colormap
+        vis = self.depth_to_colormap(
+            depth,
+            valid_mask,
+            colormap,
+            use_log
+        )
+
+        # 2. 이미지 확대
+        vis = cv2.resize(
+            vis,
+            (W * scale, H * scale),
+            interpolation=cv2.INTER_NEAREST
+        )
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+
+        # 3. 블록 단위 순회
+        for y in range(0, H, block_size):
+            for x in range(0, W, block_size):
+
+                y2 = min(y + block_size, H)
+                x2 = min(x + block_size, W)
+
+                patch = depth[y:y2, x:x2]
+                mask = np.isfinite(patch)
+
+                if valid_mask is not None:
+                    mask &= valid_mask[y:y2, x:x2]
+
+                if not mask.any():
+                    continue
+
+                # 4. 블록 평균 거리값
+                text = f"{patch[mask].mean():.{decimals}f}"
+
+                # 5. 확대된 이미지의 블록 좌표
+                x1s, y1s = x * scale, y * scale
+                x2s, y2s = x2 * scale, y2 * scale
+
+                cx = (x1s + x2s) // 2
+                cy = (y1s + y2s) // 2
+
+                # 6. 숫자 중앙 정렬
+                (tw, th), base = cv2.getTextSize(
+                    text,
+                    font,
+                    font_scale,
+                    thickness
+                )
+
+                tx = int(np.clip(
+                    cx - tw / 2,
+                    0,
+                    W * scale - tw - 1
+                ))
+
+                ty = int(np.clip(
+                    cy + th / 2,
+                    th,
+                    H * scale - base - 1
+                ))
+
+                # 7. 글자 배경
+                cv2.rectangle(
+                    vis,
+                    (tx - 1, ty - th - 1),
+                    (tx + tw + 1, ty + base + 1),
+                    (0, 0, 0),
+                    -1
+                )
+
+                # 8. 평균값 출력
+                cv2.putText(
+                    vis,
+                    text,
+                    (tx, ty),
+                    font,
+                    font_scale,
+                    (255, 255, 255),
+                    thickness,
+                    cv2.LINE_AA
+                )
+
+                # 9. 블록 경계 표시
+                if draw_grid:
+                    cv2.rectangle(
+                        vis,
+                        (x1s, y1s),
+                        (x2s - 1, y2s - 1),
+                        (40, 40, 40),
+                        1
+                    )
+
+        return vis
+
+
     def points_and_colors_from_frame(self,
         points_hw3: np.ndarray,
         image_hw3: np.ndarray,
@@ -525,6 +637,28 @@ class PanoVggt:
                 )
                 out_depth_path = os.path.join(image_dir, f"{stem}_depth.png")
                 cv2.imwrite(out_depth_path, colored)
+
+                # 블록별 Depth 평균값을 컬러맵 위에 시각화
+                valid = np.isfinite(d) & (d > 0)
+
+                depth_vis = self.visualize_depth_block_mean(
+                    depth=d,
+                    valid_mask=valid,
+                    block_size=37,
+                    decimals=1,
+                    font_scale=0.23,
+                    draw_grid=True,
+                    scale=4,
+                )
+
+                out_block_path = os.path.join(
+                    image_dir,
+                    f"{stem}_depth_block_mean.png"
+                )
+
+                cv2.imwrite(out_block_path, depth_vis)
+                print(f"Depth block mean saved: {out_block_path}")
+                breakpoint()
 
                 # raw 16-bit depth (millimetres, masked invalid → 0)
                 d_mm = (d * 1000.0).astype(np.float32)
